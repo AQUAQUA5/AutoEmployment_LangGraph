@@ -97,8 +97,8 @@ chain_output = prompt_output | llm_nano
 embedding_function = OpenAIEmbeddings(model="text-embedding-3-small")
 client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
 collection = client.get_or_create_collection(
-    name="jasosu_collection", # 컬렉션 이름 지정
-    embedding_function=embedding_function
+    name='my_collection',
+    metadata={"embedding_model": "text-embedding-3-small"}
 )
 
 
@@ -138,7 +138,9 @@ async def initNode(state: AgentState):
             detail = await chain_detail.ainvoke({'input1':tmp_input, 'role_details':role_details})
             detail = {key: utils.convert_enum_to_string(value) for key, value in detail.model_dump().items()}
             final_dict = {**final_dict, **detail}
+
     final_dict = {key: value for key, value in final_dict.items() if value}
+
     return final_dict
 
 async def managerNode(state: AgentState):
@@ -251,7 +253,7 @@ async def jasosuMainNode(state: AgentState):
     input1 = state.get('main_experience', []).copy()
     result = await chain_enoughEx.ainvoke({"input1" : input1})
     result = result.model_dump()
-    jasosu_info_enough = result.isEnough
+    jasosu_info_enough = result['isEnough']
     if jasosu_info_enough:
         jasosu_search_keyword = '전공 : ' + str(state.get('major', []).copy())+ \
                                 '직무: ' + str(state.get('pre_role', []).copy()) + \
@@ -261,12 +263,13 @@ async def jasosuMainNode(state: AgentState):
             "jasosu_info_enough" : jasosu_info_enough
         }
     return {
-        "jasosu_info_enough" : jasosu_info_enough
+        'jasosu_result' : '자소서를 작성하기 위한 경험과 성장환경에 대한 정보가 부족합니다.',
+        "jasosu_info_enough" : jasosu_info_enough,
     }
 
 async def jasosuNode_sub1(state: AgentState):   # 검색
     jasosu_search_keyword = state.get('jasosu_search_keyword', '')
-    jasosu_documents = state.get('jasosu_documents', []).copy
+    jasosu_documents = state.get('jasosu_documents', []).copy()
     vectorstore = Chroma(
         persist_directory=CHROMA_DB_PATH,
         embedding_function=embedding_function
@@ -280,7 +283,7 @@ async def jasosuNode_sub2(state: AgentState):   # 평가
     documents = state["documents"]
     filtered_docs = []
     for doc in documents:
-        response = chain_eval_doc.invoke({
+        response = await chain_eval_doc.ainvoke({
             "question": jasosu_search_keyword,
             "document_content": doc.page_content,
         })
@@ -289,21 +292,20 @@ async def jasosuNode_sub2(state: AgentState):   # 평가
     return {"filtered_documents": filtered_docs}
 
 async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
+    jasosu_documents = state.get('jasosu_documents', []).copy()
     if state['pre_role']:
         link_list = await jasosu_scraper.get_jasosu(state['pre_role'])
         documents_to_add = []
         for link in link_list:
-            jasosu = jasosu_scraper.get_jasosu_context(link)
+            jasosu = await jasosu_scraper.get_jasosu_context(link)
             documents_to_add.append(jasosu)
             collection.add(
                 documents=documents_to_add,
             )
-    jasosu_documents = state.get('jasosu_documents', []).copy()
-    jasosu_documents.extend(documents_to_add)
+        jasosu_documents.extend(documents_to_add)
     return {
         "jasosu_documents" :jasosu_documents
     }
-
 
 async def jasosuNode_sub4(state: AgentState):   # 생성
     jasosu_filtered_documents = state.get('jasosu_filtered_documents', '').copy()
@@ -334,6 +336,6 @@ async def outputNode(state: AgentState):
         "con_current": [tmp_input, output],
         # "context_current": [],
         # "tmp_input": "",
-        # "todo_list": [],
-        # "priority_list": [],
+        "todo_list": [],
+        "priority_list": [],
     }

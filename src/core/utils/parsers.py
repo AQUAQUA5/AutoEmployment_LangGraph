@@ -12,7 +12,7 @@ class TaskCategory(str, Enum):
     GENERAL_TALK = f"{TODO_CATEGORIES[3]}"
 
 class RequestItem(BaseModel):
-    task: TaskCategory = Field(description="발언에서 추출한 AI가 해야할일. 단 카테고리 중 하나")
+    task: TaskCategory = Field(description="발언에서 추출한 AI가 해야할일. 반드시 카테고리 중 하나")
     message: str = Field(description="(AI가 해야할일)을 판단한 사용자의 발언 일부")
 
 class GetRequests(BaseModel):
@@ -40,7 +40,7 @@ class GetPrefer(BaseModel):
     pre_request : List[str] = Field(default_factory=list, description="희망 기업에 대한 추가적인 조건. 특별한게 없으면 반드시 빈 리스트를 반환하세요")   # 열거형 없음
 
 class GetDetail(BaseModel):
-    pre_role_detail : List[enums.E_role_detail] = Field(default_factory=list, description="상세직무")
+    pre_role_detail : List[enums.E_role_detail] = Field(default_factory=list, description="상세직무, 명시된 상세직무가 없다면 빈 리스트를 반환하세요.")
 
 class PickJobs(BaseModel):
     indexes : List[int] = Field(default_factory=list, description="사용자에게 가장 적합한 구직공고 10개의 번호들의 리스트")

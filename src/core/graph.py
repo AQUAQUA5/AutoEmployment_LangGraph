@@ -17,6 +17,7 @@ class Graph:
         workflow.add_node("jasosuNode_sub2", nodes.jasosuNode_sub2) # 평가
         workflow.add_node("jasosuNode_sub3", nodes.jasosuNode_sub3) # 문서 재탐색
         workflow.add_node("jasosuNode_sub4", nodes.jasosuNode_sub4) # 생성
+        
         workflow.add_node("elseNode", nodes.elseNode)
         workflow.add_node("outputNode", nodes.outputNode)
 

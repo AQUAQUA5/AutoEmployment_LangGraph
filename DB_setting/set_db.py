@@ -7,14 +7,10 @@ from chromadb.utils import embedding_functions
 RAW_DATA_DIR = './data/format'
 CHROMA_DB_PATH = './db'
 
-openai_ef = embedding_functions.OpenAIEmbeddingFunction(
-                model_name="text-embedding-3-small",
-            )
-
 client = chromadb.PersistentClient(CHROMA_DB_PATH)
 collection = client.get_or_create_collection(
-    name="my_collection",
-    embedding_function=openai_ef
+    name='my_collection',
+    metadata={"embedding_model": "text-embedding-3-small"}
 )
 
 csv_files = glob.glob(os.path.join(RAW_DATA_DIR, '*.csv'))
