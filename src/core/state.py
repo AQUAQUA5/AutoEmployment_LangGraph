@@ -34,8 +34,14 @@ class AgentState(TypedDict):
     gujic_info_enough : bool
     # 자소서 작업 --------------
     jasosu_result : list
+    jasosu_search_keyword : str
     jasosu_main : str
     jasosu_com_dict : dict
+    jasosu_info_enough : bool
+    jasosu_documents : list
+    jasosu_documents_grade : float
+    jasosu_filtered_documents : list
+
     # 기타 작업 -------------
     else_result : list
 
@@ -46,8 +52,6 @@ def state_init() -> dict:
         "tmp_input": "",
         "todo_list": [],
         "priority_list": [],
-
-        
 
         # 유저정보-- 
         "education": [],
@@ -79,6 +83,12 @@ def state_init() -> dict:
         "jasosu_main": "",
         "jasosu_com_dict": {},
         "jasosu_result" : [],
+        'jasosu_info_enough' : False, 
+        "jasosu_search_keyword" : '',
+        'jasosu_documents' : [],
+        'jasosu_filtered_documents':[],
+        'jasosu_documents_grade' : 0.0,
+
         # 기타 작업
         "else_result" : [],
         }

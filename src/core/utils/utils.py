@@ -1,5 +1,13 @@
 from enum import Enum
 
+def convert_enum_to_string(obj):
+    if isinstance(obj, Enum):
+        return obj.value
+    elif isinstance(obj, list):
+        return [convert_enum_to_string(item) for item in obj]
+    else:
+        return obj
+
 ROLE_TO_DETAIL_MAP = {
     '기획·전략' : ['경영·비즈니스기획', '웹기획', '마케팅기획', 'PL·PM·PO', '컨설턴트', 'CEO·COO·CTO', 'AI기획자', 'AI사업전략'] ,
     '법무·사무·총무' : ['경영지원', '사무담당자', '총무', '사무보조', '법무담당자', '비서', '변호사', '법무사', '변리사', '노무사', 'AI윤리전문가'] ,
@@ -307,16 +315,9 @@ USER_INFO_MAP = {
 }
 
 TODO_CATEGORIES = [
-    "구직활동 돕기",
-    "자소서 돕기",
+    "구직 및 취직 도움",
+    "자소서 작성 및 수정",
     "구직 및 자소서 관련 대화",
     "기타 대화 혹은 알 수 없음",
     ]
 
-def convert_enum_to_string(obj):
-    if isinstance(obj, Enum):
-        return obj.value
-    elif isinstance(obj, list):
-        return [convert_enum_to_string(item) for item in obj]
-    else:
-        return obj

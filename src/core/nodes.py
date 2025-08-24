@@ -1,12 +1,16 @@
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
-from src.core.utils.utils import TODO_CATEGORIES, USER_INFO, USER_INFO_MAP, ROLE_MAP
+from langchain_community.vectorstores import Chroma
+import chromadb
+from src.core.utils.utils import TODO_CATEGORIES, USER_INFO, USER_INFO_MAP, ROLE_TO_DETAIL_MAP, DETAIL_TO_ROLE_MAP
+from src.core.utils.config import CHROMA_DB_PATH
 import asyncio
 
 from src.core.state import AgentState
 from src.core.utils import prompts, parsers, utils
 from src.scraper import jobkorea
+from src.scraper import jasosu_scraper
 
 # llm_base = ChatOpenAI(model="gpt-5", temperature=0)
 # llm_think = ChatOpenAI(model="gpt-5", temperature=0)
@@ -52,11 +56,35 @@ prompt_pick_jobs = ChatPromptTemplate.from_template(
 )
 chain_pick_jobs = prompt_pick_jobs | llm_nano | parser_pick_jobs
 
+# 자소서--------------------------------
+# 경험 판단
+parser_enoughEx = PydanticOutputParser(pydantic_object=parsers.EnoughEx)
+prompt_enoughEx = ChatPromptTemplate.from_template(
+    template=prompts.pt_enoughEx,
+    partial_variables={"format_instructions": parser_enoughEx.get_format_instructions()},
+)
+chain_enoughEx = prompt_enoughEx | llm_nano | parser_enoughEx
+
+# 문서 평가
+parser_eval_doc = PydanticOutputParser(pydantic_object= parsers.Evaluation)
+prompt_eval_doc = ChatPromptTemplate.from_template(
+    template=prompts.pt_eval_doc,
+    partial_variables={"format_instructions": parser_eval_doc.get_format_instructions()},
+    )
+chain_eval_doc = prompt_eval_doc | llm_nano | parser_eval_doc
+
+
 # 기타 --------------------------------------
 prompt_else_1 = ChatPromptTemplate.from_template(
     template=prompts.pt_else_1,
 )
 chain_else_1 = prompt_else_1 | llm_nano 
+
+# 자소서 생성 ------------
+prompt_gen_jasosu = ChatPromptTemplate.from_template(
+    template=prompts.pt_gen_jasosu,
+)
+chain_gen_jasosu = prompt_gen_jasosu | llm_nano 
 
 
 #--최종 출력 -----------------------------------------------------------------------------
@@ -64,6 +92,14 @@ prompt_output = ChatPromptTemplate.from_template(
     template=prompts.pt_output,
 )
 chain_output = prompt_output | llm_nano 
+
+# 임베딩
+embedding_function = OpenAIEmbeddings(model="text-embedding-3-small")
+client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+collection = client.get_or_create_collection(
+    name="jasosu_collection", # 컬렉션 이름 지정
+    embedding_function=embedding_function
+)
 
 
 # 할일정리, 정보 추출
@@ -78,18 +114,12 @@ async def initNode(state: AgentState):
         chain_prefer.ainvoke({"input1": tmp_input}),
     ]
     results = await asyncio.gather(*tasks)
-    todo_list, info, prefer, detail = results
+    todo_list, info, prefer = results
 
     # 포멧 수정
     todo_list = [(i.task.value, i.message)for i in todo_list.requests]
     info = {key: utils.convert_enum_to_string(value) for key, value in info.model_dump().items()}
     prefer = {key: utils.convert_enum_to_string(value) for key, value in prefer.model_dump().items()}
-
-    # 상세직무는 몇가지 이유로 따로
-    if 'pre_role' in prefer:
-        if prefer['prefer']:
-            role_details = prefer['prefer']
-            detail = chain_detail.ainvoke({'input1':tmp_input, 'role_details':role_details})
 
     # 우선순위 리스트
     priority_list = todo_list.copy()
@@ -100,11 +130,18 @@ async def initNode(state: AgentState):
     priority_list.insert(0, ('초기화', '초기화'))
 
     final_dict = {'todo_list':todo_list, 'priority_list' : priority_list, **info, **prefer}
+
+    # 상세직무는 몇가지 이유로 따로
+    if 'pre_role' in prefer:
+        if prefer['pre_role']:
+            role_details = ROLE_TO_DETAIL_MAP[prefer['pre_role'][0]]
+            detail = await chain_detail.ainvoke({'input1':tmp_input, 'role_details':role_details})
+            detail = {key: utils.convert_enum_to_string(value) for key, value in detail.model_dump().items()}
+            final_dict = {**final_dict, **detail}
     final_dict = {key: value for key, value in final_dict.items() if value}
     return final_dict
 
 async def managerNode(state: AgentState):
-    print(state)
     priority_list = state.get('priority_list', []).copy()
     priority_list.pop(0)
     return {
@@ -164,8 +201,7 @@ async def gujicNode_sub1(state: AgentState):
     prefer_condition = state.get('prefer_condition', [])
     pre_benefits = state.get('pre_benefits', [])
 
-
-    info1 = [('직무', ROLE_MAP[i], i) for i in pre_role_detail]
+    info1 = [('직무', DETAIL_TO_ROLE_MAP[i], i) for i in pre_role_detail]
     info2 = [('근무지역', i) for i in pre_location] + \
             [('경력', i) for i in career] + \
             [('학력', i) for i in education] + \
@@ -174,7 +210,6 @@ async def gujicNode_sub1(state: AgentState):
             [('자격증', i) for i in licenses] + \
             [('우대조건', i) for i in prefer_condition] + \
             [('복리후생', i) for i in pre_benefits]
-    print(info1, info2)
     job_num, job_list = await jobkorea.search_job_list(info1, info2)
 
     if len(job_list) > 10:
@@ -201,21 +236,84 @@ async def gujicNode_sub1(state: AgentState):
         "gujic_result" : gujic_result,
     }
 
-
-
 async def elseNode(state: AgentState):
     input1 = state.get('priority_list')
     input1 = input1[0]
-    else_result = await chain_else_1.ainvoke({"input1" : input1})
-    
+    else_result = state.get('else_result')
+    result = await chain_else_1.ainvoke({"input1" : input1})
+    else_result.append(result.content)
     return {
-        "else_result" : else_result.content
+        "else_result" : else_result
     }
 
+# 정보 충분한가 확인
 async def jasosuMainNode(state: AgentState):
-
+    input1 = state.get('main_experience', []).copy()
+    result = await chain_enoughEx.ainvoke({"input1" : input1})
+    result = result.model_dump()
+    jasosu_info_enough = result.isEnough
+    if jasosu_info_enough:
+        jasosu_search_keyword = '전공 : ' + str(state.get('major', []).copy())+ \
+                                '직무: ' + str(state.get('pre_role', []).copy()) + \
+                                '상세 직무: ' + str(state.get('pre_role_detail', []).copy()) 
+        return {
+            "jasosu_search_keyword": jasosu_search_keyword,
+            "jasosu_info_enough" : jasosu_info_enough
+        }
     return {
+        "jasosu_info_enough" : jasosu_info_enough
+    }
 
+async def jasosuNode_sub1(state: AgentState):   # 검색
+    jasosu_search_keyword = state.get('jasosu_search_keyword', '')
+    jasosu_documents = state.get('jasosu_documents', []).copy
+    vectorstore = Chroma(
+        persist_directory=CHROMA_DB_PATH,
+        embedding_function=embedding_function
+    )
+    retrieved_docs = vectorstore.similarity_search(jasosu_search_keyword, k=5)
+    jasosu_documents.extend(retrieved_docs)
+    return {"jasosu_documents": retrieved_docs}
+
+async def jasosuNode_sub2(state: AgentState):   # 평가
+    jasosu_search_keyword = state["jasosu_search_keyword"]
+    documents = state["documents"]
+    filtered_docs = []
+    for doc in documents:
+        response = chain_eval_doc.invoke({
+            "question": jasosu_search_keyword,
+            "document_content": doc.page_content,
+        })
+        if response['is_useful'] == 'yes':
+            filtered_docs.append(doc)
+    return {"filtered_documents": filtered_docs}
+
+async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
+    if state['pre_role']:
+        link_list = await jasosu_scraper.get_jasosu(state['pre_role'])
+        documents_to_add = []
+        for link in link_list:
+            jasosu = jasosu_scraper.get_jasosu_context(link)
+            documents_to_add.append(jasosu)
+            collection.add(
+                documents=documents_to_add,
+            )
+    jasosu_documents = state.get('jasosu_documents', []).copy()
+    jasosu_documents.extend(documents_to_add)
+    return {
+        "jasosu_documents" :jasosu_documents
+    }
+
+
+async def jasosuNode_sub4(state: AgentState):   # 생성
+    jasosu_filtered_documents = state.get('jasosu_filtered_documents', '').copy()
+    jasosu_main = await chain_gen_jasosu.ainvoke({'input1': state['jasosu_search_keyword'],
+                                                  'input2': state['jasosu_filtered_documents']
+                                                  })
+    jasosu_main = jasosu_main.content
+    return {
+        "jasosu_filtered_documents" : jasosu_filtered_documents,
+        'jasosu_main' : jasosu_main
     }
 
 async def outputNode(state: AgentState):
@@ -231,6 +329,7 @@ async def outputNode(state: AgentState):
                                          "jasosu_result" : jasosu_result, 
                                          "else_result": else_result,
                                          })
+    output = output.content
     return {
         "con_current": [tmp_input, output],
         # "context_current": [],

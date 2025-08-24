@@ -1,0 +1,1 @@
+CHROMA_DB_PATH = "DB_setting/db"
