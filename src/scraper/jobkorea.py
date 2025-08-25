@@ -17,7 +17,7 @@ async def click_available_element(page: Page, selector: str, text: str):      # 
     
 async def initialize_and_goto(url: str) -> Page:        # 페이지 초기화
     p = await async_playwright().start()
-    browser = await p.chromium.launch(headless=False)
+    browser = await p.chromium.launch(headless=True)
     page = await browser.new_page()
     await page.goto(url, wait_until="domcontentloaded")
     return page

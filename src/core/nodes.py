@@ -67,7 +67,7 @@ prompt_pick_jobs = ChatPromptTemplate.from_template(
     template=prompts.pt_pick_jobs,
     partial_variables={"format_instructions": parser_pick_jobs.get_format_instructions()},
 )
-chain_pick_jobs = prompt_pick_jobs | llm_think | parser_pick_jobs
+chain_pick_jobs = prompt_pick_jobs | llm_mini | parser_pick_jobs
 
 # 자소서--------------------------------
 # 경험 판단
@@ -76,7 +76,7 @@ prompt_enoughEx = ChatPromptTemplate.from_template(
     template=prompts.pt_enoughEx,
     partial_variables={"format_instructions": parser_enoughEx.get_format_instructions()},
 )
-chain_enoughEx = prompt_enoughEx | llm_think | parser_enoughEx
+chain_enoughEx = prompt_enoughEx | llm_mini | parser_enoughEx
 
 # 문서 평가
 parser_eval_doc = PydanticOutputParser(pydantic_object= parsers.Evaluation)
@@ -91,20 +91,20 @@ chain_eval_doc = prompt_eval_doc | llm_nano | parser_eval_doc
 prompt_else_1 = ChatPromptTemplate.from_template(
     template=prompts.pt_else_1,
 )
-chain_else_1 = prompt_else_1 | llm_nano 
+chain_else_1 = prompt_else_1 | llm_mini 
 
 # 자소서 생성 ------------
 prompt_gen_jasosu = ChatPromptTemplate.from_template(
     template=prompts.pt_gen_jasosu,
 )
-chain_gen_jasosu = prompt_gen_jasosu | llm_think 
+chain_gen_jasosu = prompt_gen_jasosu | llm_mini 
 
 
 #--최종 출력 -----------------------------------------------------------------------------
 prompt_output = ChatPromptTemplate.from_template(
     template=prompts.pt_output,
 )
-chain_output = prompt_output | llm_think 
+chain_output = prompt_output | llm_mini 
 
 # 임베딩
 embedding_function = OpenAIEmbeddings(model="text-embedding-3-small")
@@ -114,9 +114,9 @@ collection = client.get_or_create_collection(
     metadata={"embedding_model": "text-embedding-3-small"}
 )
 
-
 # 할일정리, 정보 추출
 async def initNode(state: AgentState):
+    print('init')
     # 사전작업
     tmp_input = state.get('tmp_input')
 
@@ -163,6 +163,7 @@ async def initNode(state: AgentState):
     return final_processed_dict
 
 async def managerNode(state: AgentState):
+    print('manager')
     priority_list = state.get('priority_list', []).copy()
     priority_list.pop(0)
     return {
@@ -170,6 +171,7 @@ async def managerNode(state: AgentState):
     }
 
 async def gujicNode(state: AgentState):
+    print('gujic')
     gujic_result = state.get('gujic_result', []).copy()
     empty_info = []
     for key in USER_INFO:
@@ -204,6 +206,7 @@ async def gujicNode(state: AgentState):
 
 
 async def gujicNode_sub1(state: AgentState):
+    print('g1')
     gujic_result = state.get('gujic_result', []).copy()
     pre_role_detail = state.get('pre_role_detail', []).copy()
     pre_location = state.get('pre_location', []).copy()
@@ -259,6 +262,7 @@ async def gujicNode_sub1(state: AgentState):
     }
 
 async def elseNode(state: AgentState):
+    print('el1')
     input1 = state.get('priority_list').copy()
     input1 = input1[0]
     else_result = state.get('else_result').copy()
@@ -271,6 +275,7 @@ async def elseNode(state: AgentState):
 
 # 정보 충분한가 확인
 async def jasosuMainNode(state: AgentState):
+    print('jm')
     input1 = state.get('main_experience', []).copy()
     result = await chain_enoughEx.ainvoke({"input1" : input1})
     result = result.model_dump()
@@ -290,17 +295,22 @@ async def jasosuMainNode(state: AgentState):
     }
 
 async def jasosuNode_sub1(state: AgentState):   # 검색
+    print('j1')
     jasosu_search_keyword = state.get('jasosu_search_keyword', '')
     jasosu_documents = state.get('jasosu_documents', []).copy()
+    jasosu_filtered_documents = state.get('jasosu_filtered_documents', []).copy()
+
     vectorstore = Chroma(
         persist_directory=CHROMA_DB_PATH,
         embedding_function=embedding_function
     )
     retrieved_docs = vectorstore.similarity_search(jasosu_search_keyword, k=5)
     jasosu_documents.extend(retrieved_docs)
-    return {"jasosu_documents": retrieved_docs}
+    jasosu_documents.extend(jasosu_filtered_documents)
+    return {"jasosu_documents": jasosu_documents}
 
 async def jasosuNode_sub2(state: AgentState):   # 평가
+    print('j2')
     jasosu_search_keyword = state["jasosu_search_keyword"]
     documents = state.get("jasosu_documents", [])
     filtered_docs = []
@@ -313,46 +323,33 @@ async def jasosuNode_sub2(state: AgentState):   # 평가
         if response['is_useful'] == 'yes':
             filtered_docs.append(doc)
             jasosu_documents_grade = 'yes'
+    if state['jasosu_no_more_data']:
+        jasosu_documents_grade = 'yes'
 
-    
     return {"filtered_documents": filtered_docs, 
             "jasosu_documents_grade":jasosu_documents_grade
             }
 
-import uuid # uuid 라이브러리 임포트
-async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
-    jasosu_documents = state.get('jasosu_documents', []).copy()
-    if state['pre_role']:
-        link_list = await jasosu_scraper.get_jasosu(state['pre_role'])
-        documents_to_add = []
-        ids_to_add = []
-        print(f"총 {len(link_list)}개의 자소서를 하나씩 스크래핑합니다...")
-        for i, link in enumerate(link_list):
-            print(f"({i+1}/{len(link_list)}) {link} 처리 중...")
-            try:
-                doc_content = await jasosu_scraper.get_jasosu_context(link)
-                if doc_content:
-                    documents_to_add.append(doc_content)
-                    ids_to_add.append(str(uuid.uuid4())) # 고유 ID 생성
+import random
 
-            except Exception as e:
-                print(f"오류: {link} 처리 중 문제 발생 - {e}")
-                continue # 오류 발생 시 다음 링크로 넘어감
-        
-        # 3. 모든 작업이 끝난 후, 수집된 문서들을 DB에 한 번에 추가
-        if documents_to_add:
-            print(f"총 {len(documents_to_add)}개의 문서를 DB에 추가합니다.")
-            collection.add(
-                documents=documents_to_add,
-                ids=ids_to_add
-            )
-        
-        jasosu_documents.extend(documents_to_add)
-        return {
-        "jasosu_filtered_documents" :jasosu_documents
+async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
+    print('j3')
+    link_list = await jasosu_scraper.get_jasosu(state['pre_role'])
+    if len(link_list) < 3:
+        return {"jasosu_no_more_data": True}
+
+    random_links = random.sample(link_list, 3)
+    data = []
+    for link in random_links:
+        dat = await jasosu_scraper.get_jasosu_context(link)
+        data.append(dat)
+            
+    return {
+        "jasosu_filtered_documents" :data
     }
 
 async def jasosuNode_sub4(state: AgentState):   # 생성
+    print('j4')
     jasosu_filtered_documents = state.get('jasosu_filtered_documents', '').copy()
     jasosu_main = await chain_gen_jasosu.ainvoke({'input1': state['jasosu_search_keyword'],
                                                   'input2': state['jasosu_filtered_documents']
@@ -364,6 +361,7 @@ async def jasosuNode_sub4(state: AgentState):   # 생성
     }
 
 async def outputNode(state: AgentState):
+    print('o')
     tmp_input = state.get('tmp_input', '')
     todo_list = state.get('todo_list', []).copy()
     job_list = state.get('job_list', []).copy()
