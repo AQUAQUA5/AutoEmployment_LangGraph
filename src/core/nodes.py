@@ -159,7 +159,7 @@ async def initNode(state: AgentState):
     final_processed_dict = process_state_data(final_dict)
     final_processed_dict = {key: value for key, value in final_processed_dict.items() if value}
 
-    
+    print(priority_list)
     return final_processed_dict
 
 async def managerNode(state: AgentState):
@@ -298,7 +298,6 @@ async def jasosuNode_sub1(state: AgentState):   # 검색
     print('j1')
     jasosu_search_keyword = state.get('jasosu_search_keyword', '')
     jasosu_documents = state.get('jasosu_documents', []).copy()
-    jasosu_filtered_documents = state.get('jasosu_filtered_documents', []).copy()
 
     vectorstore = Chroma(
         persist_directory=CHROMA_DB_PATH,
@@ -306,15 +305,23 @@ async def jasosuNode_sub1(state: AgentState):   # 검색
     )
     retrieved_docs = vectorstore.similarity_search(jasosu_search_keyword, k=5)
     jasosu_documents.extend(retrieved_docs)
-    jasosu_documents.extend(jasosu_filtered_documents)
     return {"jasosu_documents": jasosu_documents}
 
 async def jasosuNode_sub2(state: AgentState):   # 평가
     print('j2')
     jasosu_search_keyword = state["jasosu_search_keyword"]
+    roop_cnt = state['roop_cnt']
+    if roop_cnt > 4:
+        return {"jasosu_documents_grade" : 'yes'}
+
     documents = state.get("jasosu_documents", [])
     filtered_docs = []
+
+    jasosu_str_doc = state.get("jasosu_str_doc", [])
+    jasosu_str_filtered_doc = []
     jasosu_documents_grade = 'no'
+
+    # 임베딩된거
     for doc in documents:
         response = await chain_eval_doc.ainvoke({
             "question": jasosu_search_keyword,
@@ -323,17 +330,30 @@ async def jasosuNode_sub2(state: AgentState):   # 평가
         if response['is_useful'] == 'yes':
             filtered_docs.append(doc)
             jasosu_documents_grade = 'yes'
+
+    # 안된거
+    for str_doc in jasosu_str_doc:
+        response = await chain_eval_doc.ainvoke({
+            "question": jasosu_search_keyword,
+            "document_content": str_doc,
+        })
+        if response['is_useful'] == 'yes':
+            jasosu_str_filtered_doc.append(doc)
+            jasosu_documents_grade = 'yes'
+
     if state['jasosu_no_more_data']:
         jasosu_documents_grade = 'yes'
 
     return {"filtered_documents": filtered_docs, 
-            "jasosu_documents_grade":jasosu_documents_grade
+            "jasosu_str_filtered_doc": jasosu_str_filtered_doc,
+            "jasosu_documents_grade":jasosu_documents_grade,
             }
 
 import random
 
 async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
     print('j3')
+    roop_cnt = state['roop_cnt']
     link_list = await jasosu_scraper.get_jasosu(state['pre_role'])
     if len(link_list) < 3:
         return {"jasosu_no_more_data": True}
@@ -345,7 +365,8 @@ async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
         data.append(dat)
             
     return {
-        "jasosu_filtered_documents" :data
+        "jasosu_str_doc" :data,
+        "roop_cnt" : roop_cnt+1 
     }
 
 async def jasosuNode_sub4(state: AgentState):   # 생성

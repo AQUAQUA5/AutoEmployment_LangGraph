@@ -42,6 +42,7 @@ class AgentState(TypedDict):
     jasosu_documents_grade : str
     jasosu_filtered_documents : list
     jasosu_no_more_data : bool
+    roop_cnt : int
 
     # 기타 작업 -------------
     else_result : list
@@ -86,10 +87,15 @@ def state_init() -> dict:
         "jasosu_result" : [],
         'jasosu_info_enough' : 'No', 
         "jasosu_search_keyword" : '',
+
         'jasosu_documents' : [],
         'jasosu_filtered_documents':[],
+
+        'jasosu_str_doc' : [],
+        'jasosu_str_filtered_doc' : [],
         'jasosu_documents_grade' : 'no',
         'jasosu_no_more_data' : False,
+        'roop_cnt' : 0,
         # 기타 작업
         "else_result" : [],
         }

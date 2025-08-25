@@ -69,15 +69,17 @@ class Graph:
         workflow.add_edge("outputNode", END)
         self.app = workflow.compile()
 
-    async def select_Node(self, state : AgentState):
-        priority_list = state.get('priority_list').copy()
+    async def select_Node(self, state: AgentState):
+        priority_list = state.get('priority_list', [])
         if not priority_list:
-             return "outputNode"
-        if priority_list[0][0]==TODO_CATEGORIES[0]:
-                return "gujicNode"
-        if priority_list[0][0]==TODO_CATEGORIES[1]:
-                return "jasosuMainNode"
-        return "elseNode"
+            return "outputNode"
+        next_task_name = priority_list[0][0]
+        if next_task_name == TODO_CATEGORIES[0]: # "구직활동 돕기"
+            return "gujicNode"
+        elif next_task_name == TODO_CATEGORIES[1]: # "자소서 작성 및 수정"
+            return "jasosuMainNode"
+        else: # "기타 대화" 등
+            return "elseNode"
     
     async def is_gujicinfo_enough(self, state : AgentState):
         priority_list = state.get('gujic_info_enough', False)
@@ -93,11 +95,11 @@ class Graph:
         return 'managerNode'
     
     async def grade_doc(self, state: AgentState ):
-        doc_grade = state.get('jasosu_documents_grade', 'no')
-        if doc_grade == 'yes':
-            return "jasosuNode_sub4"
-        else:
+        doc_grade = state.get('jasosu_documents_grade', 'yes')
+        if doc_grade == 'no':
             return "jasosuNode_sub3"
+        else:
+            return "jasosuNode_sub4"
               
          
     async def run(self, initial_state: dict):
