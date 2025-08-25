@@ -43,11 +43,11 @@ class GetDetail(BaseModel):
     pre_role_detail : List[enums.E_role_detail] = Field(default_factory=list, description="상세직무, 명시된 상세직무가 없다면 빈 리스트를 반환하세요.")
 
 class PickJobs(BaseModel):
-    indexes : List[int] = Field(default_factory=list, description="사용자에게 가장 적합한 구직공고 10개의 번호들의 리스트")
+    indexes : List[int] = Field(default_factory=list, description="사용자에게 가장 적합한 구직공고 10개의 번호들의 리스트, 고른 숫자는 반드시 10개 이하일것.")
     reason : str = Field(..., max_length=500, description="당신이 해당 공고들을 고른 이유에 대해서 간략하게 설명해주세요.")
 
 class EnoughEx(BaseModel):
-    isEnough : bool = Field(description="사용자의 경험과 성장과정이 자소서를 작성하기에 충분한가? 충분하다면 True 아니면 False")
+    is_enugh: str = Field(description="문서가 자소서 작성에 유용한지 여부, 'yes' 또는 'no'로 답변", enum=["yes", "no"])
 
 class Evaluation(BaseModel):
     is_useful: str = Field(description="문서가 자소서 작성에 유용한지 여부, 'yes' 또는 'no'로 답변", enum=["yes", "no"])

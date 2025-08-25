@@ -1,8 +1,7 @@
 from langgraph.graph import StateGraph, END
 from src.core import nodes
 from src.core.state import AgentState
-from src.core.utils.utils import TODO_CATEGORIES, USER_INFO
-import asyncio
+from src.core.utils.utils import TODO_CATEGORIES
 
 class Graph:
     def __init__(self):
@@ -17,7 +16,7 @@ class Graph:
         workflow.add_node("jasosuNode_sub2", nodes.jasosuNode_sub2) # 평가
         workflow.add_node("jasosuNode_sub3", nodes.jasosuNode_sub3) # 문서 재탐색
         workflow.add_node("jasosuNode_sub4", nodes.jasosuNode_sub4) # 생성
-        
+
         workflow.add_node("elseNode", nodes.elseNode)
         workflow.add_node("outputNode", nodes.outputNode)
 
@@ -71,7 +70,7 @@ class Graph:
         self.app = workflow.compile()
 
     async def select_Node(self, state : AgentState):
-        priority_list = state.get('priority_list')
+        priority_list = state.get('priority_list').copy()
         if not priority_list:
              return "outputNode"
         if priority_list[0][0]==TODO_CATEGORIES[0]:
@@ -89,7 +88,7 @@ class Graph:
     
     async def is_jasosuinfo_enough(self, state : AgentState):
         jasosu_info_enough = state.get('jasosu_info_enough', False)
-        if jasosu_info_enough:
+        if jasosu_info_enough=="Yes":
              return 'jasosuNode_sub1'
         return 'managerNode'
     

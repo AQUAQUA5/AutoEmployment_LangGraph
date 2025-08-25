@@ -1,4 +1,17 @@
 from enum import Enum
+from langchain_core.messages import HumanMessage
+
+def process_state_data(data):
+    if isinstance(data, HumanMessage):
+        return data.content
+    if isinstance(data, Enum):
+        return data.value
+    if isinstance(data, dict):
+        return {key: process_state_data(value) for key, value in data.items()}
+    if isinstance(data, (list, tuple)):
+        return [process_state_data(item) for item in data]
+    return data
+
 
 def convert_enum_to_string(obj):
     if isinstance(obj, Enum):

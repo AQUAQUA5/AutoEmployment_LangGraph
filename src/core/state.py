@@ -11,20 +11,20 @@ class AgentState(TypedDict):
     education : list
     major : list
     career : list
-    licenses : Annotated[list, add_messages]
-    prefer_condition : Annotated[list, add_messages]
-    main_experience : Annotated[list, add_messages]
+    licenses : list
+    prefer_condition : list
+    main_experience : list
 
-    pre_salary : int
-    pre_location : Annotated[list, add_messages]
-    pre_industry : Annotated[list, add_messages]
+    pre_salary : list
+    pre_location : list
+    pre_industry : list
 
-    pre_role : Annotated[list, add_messages]
-    pre_role_detail : Annotated[list, add_messages]
+    pre_role : list
+    pre_role_detail : list
 
-    pre_company_type : Annotated[list, add_messages]
-    pre_employee_type : Annotated[list, add_messages]
-    pre_request : Annotated[list, add_messages]
+    pre_company_type : list
+    pre_employee_type : list
+    pre_request : list
 
     keywords : list
     # 구직 작업 --------------------------
@@ -37,7 +37,7 @@ class AgentState(TypedDict):
     jasosu_search_keyword : str
     jasosu_main : str
     jasosu_com_dict : dict
-    jasosu_info_enough : bool
+    jasosu_info_enough : str
     jasosu_documents : list
     jasosu_documents_grade : float
     jasosu_filtered_documents : list
@@ -83,7 +83,7 @@ def state_init() -> dict:
         "jasosu_main": "",
         "jasosu_com_dict": {},
         "jasosu_result" : [],
-        'jasosu_info_enough' : False, 
+        'jasosu_info_enough' : 'No', 
         "jasosu_search_keyword" : '',
         'jasosu_documents' : [],
         'jasosu_filtered_documents':[],

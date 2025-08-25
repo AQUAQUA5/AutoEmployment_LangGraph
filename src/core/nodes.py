@@ -3,17 +3,30 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_community.vectorstores import Chroma
 import chromadb
+from enum import Enum
+from langchain_core.messages import HumanMessage
 from src.core.utils.utils import TODO_CATEGORIES, USER_INFO, USER_INFO_MAP, ROLE_TO_DETAIL_MAP, DETAIL_TO_ROLE_MAP
 from src.core.utils.config import CHROMA_DB_PATH
 import asyncio
 
 from src.core.state import AgentState
 from src.core.utils import prompts, parsers, utils
-from src.scraper import jobkorea
-from src.scraper import jasosu_scraper
+from src.scraper import jobkorea, jasosu_scraper
+
+def process_state_data(data):
+    if isinstance(data, HumanMessage):
+        return data.content
+    if isinstance(data, Enum):
+        return data.value
+    if isinstance(data, dict):
+        return {key: process_state_data(value) for key, value in data.items()}
+    if isinstance(data, (list, tuple)):
+        return [process_state_data(item) for item in data]
+    return data
 
 # llm_base = ChatOpenAI(model="gpt-5", temperature=0)
-# llm_think = ChatOpenAI(model="gpt-5", temperature=0)
+llm_think = ChatOpenAI(model="gpt-5", temperature=0)
+llm_mini = ChatOpenAI(model="gpt-5", temperature=0)
 llm_nano = ChatOpenAI(model="gpt-5-nano", temperature=0)
 
 # 요구사항 추출
@@ -22,7 +35,7 @@ prompt_request = ChatPromptTemplate.from_template(
     template=prompts.pt_requests,
     partial_variables={"format_instructions": parser_request.get_format_instructions()},
 )
-chain_requests = prompt_request | llm_nano | parser_request
+chain_requests = prompt_request | llm_mini | parser_request
 
 # 정보 추출
 parser_info = PydanticOutputParser(pydantic_object=parsers.GetInfo)
@@ -30,7 +43,7 @@ prompt_info = ChatPromptTemplate.from_template(
     template=prompts.pt_info,
     partial_variables={"format_instructions": parser_info.get_format_instructions()},
 )
-chain_info = prompt_info | llm_nano | parser_info
+chain_info = prompt_info | llm_mini | parser_info
 
 # 희망사항 추출
 parser_prefer = PydanticOutputParser(pydantic_object=parsers.GetPrefer)
@@ -38,7 +51,7 @@ prompt_prefer = ChatPromptTemplate.from_template(
     template=prompts.pt_prefer,
     partial_variables={"format_instructions": parser_prefer.get_format_instructions()},
 )
-chain_prefer = prompt_prefer | llm_nano | parser_prefer
+chain_prefer = prompt_prefer | llm_mini | parser_prefer
 
 # 상세직무 추출
 parser_detail = PydanticOutputParser(pydantic_object=parsers.GetDetail)
@@ -46,7 +59,7 @@ prompt_detail = ChatPromptTemplate.from_template(
     template=prompts.pt_detail,
     partial_variables={"format_instructions": parser_detail.get_format_instructions()},
 )
-chain_detail = prompt_detail | llm_nano | parser_detail
+chain_detail = prompt_detail | llm_mini | parser_detail
 
 # 적절한 공고 선택
 parser_pick_jobs = PydanticOutputParser(pydantic_object=parsers.PickJobs)
@@ -54,7 +67,7 @@ prompt_pick_jobs = ChatPromptTemplate.from_template(
     template=prompts.pt_pick_jobs,
     partial_variables={"format_instructions": parser_pick_jobs.get_format_instructions()},
 )
-chain_pick_jobs = prompt_pick_jobs | llm_nano | parser_pick_jobs
+chain_pick_jobs = prompt_pick_jobs | llm_think | parser_pick_jobs
 
 # 자소서--------------------------------
 # 경험 판단
@@ -63,7 +76,7 @@ prompt_enoughEx = ChatPromptTemplate.from_template(
     template=prompts.pt_enoughEx,
     partial_variables={"format_instructions": parser_enoughEx.get_format_instructions()},
 )
-chain_enoughEx = prompt_enoughEx | llm_nano | parser_enoughEx
+chain_enoughEx = prompt_enoughEx | llm_think | parser_enoughEx
 
 # 문서 평가
 parser_eval_doc = PydanticOutputParser(pydantic_object= parsers.Evaluation)
@@ -84,14 +97,14 @@ chain_else_1 = prompt_else_1 | llm_nano
 prompt_gen_jasosu = ChatPromptTemplate.from_template(
     template=prompts.pt_gen_jasosu,
 )
-chain_gen_jasosu = prompt_gen_jasosu | llm_nano 
+chain_gen_jasosu = prompt_gen_jasosu | llm_think 
 
 
 #--최종 출력 -----------------------------------------------------------------------------
 prompt_output = ChatPromptTemplate.from_template(
     template=prompts.pt_output,
 )
-chain_output = prompt_output | llm_nano 
+chain_output = prompt_output | llm_think 
 
 # 임베딩
 embedding_function = OpenAIEmbeddings(model="text-embedding-3-small")
@@ -106,44 +119,51 @@ collection = client.get_or_create_collection(
 async def initNode(state: AgentState):
     # 사전작업
     tmp_input = state.get('tmp_input')
-    context_current = state.get('context_current')
-    #정보 추출
+
+    # 정보 추출
     tasks = [
         chain_requests.ainvoke({"input1": tmp_input}), 
         chain_info.ainvoke({"input1": tmp_input}),
         chain_prefer.ainvoke({"input1": tmp_input}),
     ]
     results = await asyncio.gather(*tasks)
-    todo_list, info, prefer = results
+    
+    # 결과를 Pydantic 객체 그대로 유지
+    todo_list_obj, info_obj, prefer_obj = results
 
-    # 포멧 수정
-    todo_list = [(i.task.value, i.message)for i in todo_list.requests]
-    info = {key: utils.convert_enum_to_string(value) for key, value in info.model_dump().items()}
-    prefer = {key: utils.convert_enum_to_string(value) for key, value in prefer.model_dump().items()}
+    # Pydantic 객체들을 딕셔너리로만 변환하여 final_dict 구성
+    final_dict = {
+        'todo_list': todo_list_obj.model_dump().get('requests', []),
+        'priority_list': [], # 임시로 빈 리스트, 아래에서 채움
+        **info_obj.model_dump(),
+        **prefer_obj.model_dump()
+    }
 
-    # 우선순위 리스트
-    priority_list = todo_list.copy()
+    # 상세 직무 처리
+    prefer_dict = prefer_obj.model_dump()
+    if 'pre_role' in prefer_dict and prefer_dict.get('pre_role'):
+        role_details_key = prefer_obj.pre_role[0].value 
+        role_details = ROLE_TO_DETAIL_MAP.get(role_details_key)
+        if role_details:
+            detail_obj = await chain_detail.ainvoke({'input1': tmp_input, 'role_details': role_details})
+            final_dict.update(detail_obj.model_dump())
+
+    # 우선순위 리스트 생성 (todo_list는 아직 객체 리스트)
+    priority_list = [(item['task'], item['message']) for item in final_dict.get('todo_list', [])]
     for i in range(len(priority_list)):
-        if priority_list[i][0] == '구직활동 돕기':
+        if priority_list[i][0] == '구직 및 취직 도움':
             priority_list.insert(0, priority_list.pop(i))
-
     priority_list.insert(0, ('초기화', '초기화'))
+    final_dict['priority_list'] = priority_list
 
-    final_dict = {'todo_list':todo_list, 'priority_list' : priority_list, **info, **prefer}
+    final_processed_dict = process_state_data(final_dict)
+    final_processed_dict = {key: value for key, value in final_processed_dict.items() if value}
 
-    # 상세직무는 몇가지 이유로 따로
-    if 'pre_role' in prefer:
-        if prefer['pre_role']:
-            role_details = ROLE_TO_DETAIL_MAP[prefer['pre_role'][0]]
-            detail = await chain_detail.ainvoke({'input1':tmp_input, 'role_details':role_details})
-            detail = {key: utils.convert_enum_to_string(value) for key, value in detail.model_dump().items()}
-            final_dict = {**final_dict, **detail}
-
-    final_dict = {key: value for key, value in final_dict.items() if value}
-
-    return final_dict
+    
+    return final_processed_dict
 
 async def managerNode(state: AgentState):
+    print(state)
     priority_list = state.get('priority_list', []).copy()
     priority_list.pop(0)
     return {
@@ -168,7 +188,7 @@ async def gujicNode(state: AgentState):
         }
 
     if ('pre_role_detail' in empty_info):
-        detail_list = await jobkorea.get_role_sub_categories(state.get('pre_role'))
+        detail_list = await jobkorea.get_role_sub_categories(state.get('pre_role').copy())
         gujic_result.append('특히 상세직무에 대한 정보가 필요합니다. '+ str(detail_list)+' 중에서 희망하는 직무가 있나요?')
         return {
             "gujic_info_enough" : False,
@@ -176,7 +196,7 @@ async def gujicNode(state: AgentState):
             "empty_info" : empty_info,
         }
     
-    if (len(empty_info) < len(USER_INFO) * 0.8):
+    if (len(empty_info) < len(USER_INFO) * 0.3):
         return {
             "gujic_info_enough" : False,
             "gujic_result" : gujic_result,
@@ -193,15 +213,15 @@ async def gujicNode(state: AgentState):
 
 async def gujicNode_sub1(state: AgentState):
     gujic_result = state.get('gujic_result', []).copy()
-    pre_role_detail = state.get('pre_role_detail', [])
-    pre_location = state.get('pre_location', [])
-    career = state.get('career', [])
-    education = state.get('education', [])
-    pre_company_type = state.get('pre_company_type', [])
-    pre_employee_type = state.get('pre_employee_type', [])
-    licenses = state.get('licenses', [])
-    prefer_condition = state.get('prefer_condition', [])
-    pre_benefits = state.get('pre_benefits', [])
+    pre_role_detail = state.get('pre_role_detail', []).copy()
+    pre_location = state.get('pre_location', []).copy()
+    career = state.get('career', []).copy()
+    education = state.get('education', []).copy()
+    pre_company_type = state.get('pre_company_type', []).copy()
+    pre_employee_type = state.get('pre_employee_type', []).copy()
+    licenses = state.get('licenses', []).copy()
+    prefer_condition = state.get('prefer_condition', []).copy()
+    pre_benefits = state.get('pre_benefits', []).copy()
 
     info1 = [('직무', DETAIL_TO_ROLE_MAP[i], i) for i in pre_role_detail]
     info2 = [('근무지역', i) for i in pre_location] + \
@@ -212,6 +232,7 @@ async def gujicNode_sub1(state: AgentState):
             [('자격증', i) for i in licenses] + \
             [('우대조건', i) for i in prefer_condition] + \
             [('복리후생', i) for i in pre_benefits]
+    
     job_num, job_list = await jobkorea.search_job_list(info1, info2)
 
     if len(job_list) > 10:
@@ -229,9 +250,14 @@ async def gujicNode_sub1(state: AgentState):
 
         result = await chain_pick_jobs.ainvoke({"user_info" : user_info, 'con_context' : con_context, 'tmp_input': tmp_input, "job_list":job_list})
         result.model_dump()
+        result  = process_state_data(result)
         indexes = result.indexes
         reason = result.reason
         gujic_result.append(reason)
+        print(f"job_list의 길이: {len(job_list)}")
+        print(f"indexes의 내용: {indexes}")
+        if len(indexes) > 10:
+            indexes = indexes[0:10]
         new_job_list = [job_list[idx] for idx in indexes]
     return {
         "job_list": new_job_list,
@@ -239,10 +265,11 @@ async def gujicNode_sub1(state: AgentState):
     }
 
 async def elseNode(state: AgentState):
-    input1 = state.get('priority_list')
+    input1 = state.get('priority_list').copy()
     input1 = input1[0]
-    else_result = state.get('else_result')
+    else_result = state.get('else_result').copy()
     result = await chain_else_1.ainvoke({"input1" : input1})
+
     else_result.append(result.content)
     return {
         "else_result" : else_result
@@ -253,8 +280,9 @@ async def jasosuMainNode(state: AgentState):
     input1 = state.get('main_experience', []).copy()
     result = await chain_enoughEx.ainvoke({"input1" : input1})
     result = result.model_dump()
-    jasosu_info_enough = result['isEnough']
-    if jasosu_info_enough:
+    result  = process_state_data(result)
+    jasosu_info_enough = result['is_enugh']
+    if jasosu_info_enough=="Yes":
         jasosu_search_keyword = '전공 : ' + str(state.get('major', []).copy())+ \
                                 '직무: ' + str(state.get('pre_role', []).copy()) + \
                                 '상세 직무: ' + str(state.get('pre_role_detail', []).copy()) 
@@ -280,7 +308,7 @@ async def jasosuNode_sub1(state: AgentState):   # 검색
 
 async def jasosuNode_sub2(state: AgentState):   # 평가
     jasosu_search_keyword = state["jasosu_search_keyword"]
-    documents = state["documents"]
+    documents = state.get("jasosu_documents", [])
     filtered_docs = []
     for doc in documents:
         response = await chain_eval_doc.ainvoke({
@@ -320,13 +348,15 @@ async def jasosuNode_sub4(state: AgentState):   # 생성
 
 async def outputNode(state: AgentState):
     tmp_input = state.get('tmp_input', '')
-    todo_list = state.get('todo_list', '').copy()
+    todo_list = state.get('todo_list', []).copy()
+    job_list = state.get('job_list', []).copy()
     gujic_result = state.get('gujic_result', '').copy()
-    jasosu_result = state.get('jasosu_result', '').copy()
+    jasosu_result = state.get('jasosu_result', '')
     else_result = state.get('else_result', '').copy()
     
     output = await chain_output.ainvoke({#"tmp_input": tmp_input, 
                                          "todo_list": todo_list, 
+                                         "job_list" : job_list,
                                          "gujic_result":gujic_result,
                                          "jasosu_result" : jasosu_result, 
                                          "else_result": else_result,
