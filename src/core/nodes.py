@@ -326,18 +326,27 @@ async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
         link_list = await jasosu_scraper.get_jasosu(state['pre_role'])
         documents_to_add = []
         ids_to_add = []
-        tasks = [jasosu_scraper.get_jasosu_context(link) for link in link_list]
-        new_docs = await asyncio.gather(*tasks)
+        print(f"총 {len(link_list)}개의 자소서를 하나씩 스크래핑합니다...")
+        for i, link in enumerate(link_list):
+            print(f"({i+1}/{len(link_list)}) {link} 처리 중...")
+            try:
+                doc_content = await jasosu_scraper.get_jasosu_context(link)
+                if doc_content:
+                    documents_to_add.append(doc_content)
+                    ids_to_add.append(str(uuid.uuid4())) # 고유 ID 생성
 
-        for i, doc_content in enumerate(new_docs):
-            documents_to_add.append(doc_content)
-            ids_to_add.append(str(uuid.uuid4()))
-
+            except Exception as e:
+                print(f"오류: {link} 처리 중 문제 발생 - {e}")
+                continue # 오류 발생 시 다음 링크로 넘어감
+        
+        # 3. 모든 작업이 끝난 후, 수집된 문서들을 DB에 한 번에 추가
         if documents_to_add:
+            print(f"총 {len(documents_to_add)}개의 문서를 DB에 추가합니다.")
             collection.add(
                 documents=documents_to_add,
-                ids=ids_to_add # 생성한 ID 리스트 전달
+                ids=ids_to_add
             )
+        
         jasosu_documents.extend(documents_to_add)
         return {
         "jasosu_filtered_documents" :jasosu_documents
