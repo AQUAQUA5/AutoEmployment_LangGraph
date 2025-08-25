@@ -319,20 +319,28 @@ async def jasosuNode_sub2(state: AgentState):   # 평가
             "jasosu_documents_grade":jasosu_documents_grade
             }
 
+import uuid # uuid 라이브러리 임포트
 async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
     jasosu_documents = state.get('jasosu_documents', []).copy()
     if state['pre_role']:
         link_list = await jasosu_scraper.get_jasosu(state['pre_role'])
         documents_to_add = []
-        for link in link_list:
-            jasosu = await jasosu_scraper.get_jasosu_context(link)
-            documents_to_add.append(jasosu)
+        ids_to_add = []
+        tasks = [jasosu_scraper.get_jasosu_context(link) for link in link_list]
+        new_docs = await asyncio.gather(*tasks)
+
+        for i, doc_content in enumerate(new_docs):
+            documents_to_add.append(doc_content)
+            ids_to_add.append(str(uuid.uuid4()))
+
+        if documents_to_add:
             collection.add(
                 documents=documents_to_add,
+                ids=ids_to_add # 생성한 ID 리스트 전달
             )
         jasosu_documents.extend(documents_to_add)
-    return {
-        "jasosu_documents" :jasosu_documents
+        return {
+        "jasosu_filtered_documents" :jasosu_documents
     }
 
 async def jasosuNode_sub4(state: AgentState):   # 생성

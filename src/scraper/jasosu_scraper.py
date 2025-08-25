@@ -5,6 +5,10 @@ import re
 async def get_jasosu( role ): 
     SEARCH_URL = "https://www.jobkorea.co.kr/starter/passassay"
     links = []
+    if isinstance(role, list) and role:
+        role = role[0]
+    else:
+        role = role
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False) # False로 설정하면 브라우저 창이 보입니다.
         page = await browser.new_page()
