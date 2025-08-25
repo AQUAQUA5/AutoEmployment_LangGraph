@@ -88,13 +88,13 @@ class Graph:
     
     async def is_jasosuinfo_enough(self, state : AgentState):
         jasosu_info_enough = state.get('jasosu_info_enough', False)
-        if jasosu_info_enough=="Yes":
+        if (jasosu_info_enough=="Yes") or (jasosu_info_enough=="yes"):
              return 'jasosuNode_sub1'
         return 'managerNode'
     
     async def grade_doc(self, state: AgentState ):
-        doc_grade = state.get('jasosu_info_enough', False)
-        if doc_grade > 0.6:
+        doc_grade = state.get('jasosu_documents_grade', 'no')
+        if doc_grade == 'yes':
             return "jasosuNode_sub4"
         else:
             return "jasosuNode_sub3"

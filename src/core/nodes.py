@@ -163,7 +163,6 @@ async def initNode(state: AgentState):
     return final_processed_dict
 
 async def managerNode(state: AgentState):
-    print(state)
     priority_list = state.get('priority_list', []).copy()
     priority_list.pop(0)
     return {
@@ -190,13 +189,6 @@ async def gujicNode(state: AgentState):
     if ('pre_role_detail' in empty_info):
         detail_list = await jobkorea.get_role_sub_categories(state.get('pre_role').copy())
         gujic_result.append('특히 상세직무에 대한 정보가 필요합니다. '+ str(detail_list)+' 중에서 희망하는 직무가 있나요?')
-        return {
-            "gujic_info_enough" : False,
-            "gujic_result" : gujic_result,
-            "empty_info" : empty_info,
-        }
-    
-    if (len(empty_info) < len(USER_INFO) * 0.3):
         return {
             "gujic_info_enough" : False,
             "gujic_result" : gujic_result,
@@ -248,7 +240,7 @@ async def gujicNode_sub1(state: AgentState):
         tmp_input = state.get('tmp_input', '')
         job_list_for_ai = [str(idx)+'번 구직공고 정보 : <<<' + job_info[2] + '>>>' for idx, job_info in enumerate(job_list)]
 
-        result = await chain_pick_jobs.ainvoke({"user_info" : user_info, 'con_context' : con_context, 'tmp_input': tmp_input, "job_list":job_list})
+        result = await chain_pick_jobs.ainvoke({"user_info" : user_info, 'con_context' : con_context, 'tmp_input': tmp_input, "job_list":job_list_for_ai})
         result.model_dump()
         result  = process_state_data(result)
         indexes = result.indexes
@@ -256,8 +248,10 @@ async def gujicNode_sub1(state: AgentState):
         gujic_result.append(reason)
         print(f"job_list의 길이: {len(job_list)}")
         print(f"indexes의 내용: {indexes}")
+        print(job_list, reason)
         if len(indexes) > 10:
             indexes = indexes[0:10]
+        indexes = [idx-1 for idx in indexes]
         new_job_list = [job_list[idx] for idx in indexes]
     return {
         "job_list": new_job_list,
@@ -310,6 +304,7 @@ async def jasosuNode_sub2(state: AgentState):   # 평가
     jasosu_search_keyword = state["jasosu_search_keyword"]
     documents = state.get("jasosu_documents", [])
     filtered_docs = []
+    jasosu_documents_grade = 'no'
     for doc in documents:
         response = await chain_eval_doc.ainvoke({
             "question": jasosu_search_keyword,
@@ -317,7 +312,12 @@ async def jasosuNode_sub2(state: AgentState):   # 평가
         })
         if response['is_useful'] == 'yes':
             filtered_docs.append(doc)
-    return {"filtered_documents": filtered_docs}
+            jasosu_documents_grade = 'yes'
+
+    
+    return {"filtered_documents": filtered_docs, 
+            "jasosu_documents_grade":jasosu_documents_grade
+            }
 
 async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
     jasosu_documents = state.get('jasosu_documents', []).copy()
