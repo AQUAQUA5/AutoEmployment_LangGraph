@@ -165,7 +165,8 @@ async def initNode(state: AgentState):
 async def managerNode(state: AgentState):
     print('manager')
     priority_list = state.get('priority_list', []).copy()
-    priority_list.pop(0)
+    if priority_list:
+        priority_list.pop(0)
     return {
         'priority_list' : priority_list,
     }
@@ -366,7 +367,7 @@ async def jasosuNode_sub3(state: AgentState):   # 외부 데이터 추가
             
     return {
         "jasosu_str_doc" :data,
-        "roop_cnt" : roop_cnt+1 
+        "roop_cnt" : roop_cnt+1,
     }
 
 async def jasosuNode_sub4(state: AgentState):   # 생성

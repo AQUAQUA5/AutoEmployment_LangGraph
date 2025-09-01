@@ -40,7 +40,7 @@ async def click_job_button_on_page(page: Page, info1, info2):       # 검색
     await page.locator('#dev-btn-search[disabled]:has-text("검색완료")').wait_for(state="visible", timeout=15000)
 
 
-async def search_job_list(info1, info2 ): # 최종 리스트 반환
+async def search_job_list(info1, info2 ): 
     SEARCH_URL = "https://www.jobkorea.co.kr/recruit/joblist?menucode=search"
     job_data = []
     async with async_playwright() as p:
@@ -70,7 +70,7 @@ async def search_job_list(info1, info2 ): # 최종 리스트 반환
 
 
 
-async def get_role_sub_categories( main_category ): # 최종 리스트 반환
+async def get_role_sub_categories( main_category ): 
     SEARCH_URL = "https://www.jobkorea.co.kr/recruit/joblist?menucode=search"
     categories = []
     async with async_playwright() as p:
