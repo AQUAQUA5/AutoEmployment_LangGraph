@@ -15,6 +15,23 @@ async def click_category(category , main_box, print_procces):
 async def click_option_1(option , main_box, print_procces):
     try:
         botton =  main_box.get_by_text(text=option, exact =True).filter(visible=True)
+        cnt = await botton.count()
+        if cnt == 0:
+            raise RuntimeError(f"{option} 을(를) 찾을 수 없습니다.")
+        elif cnt == 1:
+            await botton.first.click()
+        else:
+            await botton.nth(0).click()
+            print('0번째 버튼 클릭')
+
+        if print_procces:
+            print(f"{option} 버튼 클릭 성공")
+    except Exception as e:
+        print(f"{option} 버튼 클릭 실패 :", e)
+
+async def click_option_2(option , main_box, print_procces):
+    try:
+        botton =  main_box.get_by_text(text=option, exact =True).filter(visible=True)
         await botton.nth(1).click()
     except Exception as e:
         print('직무 버튼 클릭 실패 :', e)
@@ -29,7 +46,7 @@ async def get_searchedJob( options , hide_browser = False, print_procces=True):
             browser = await p.chromium.launch(headless=hide_browser) # False는 브라우저창 보임
             page = await browser.new_page()
             page.set_default_timeout(30000)
-            await page.goto(SEARCH_URL)
+            await page.goto(SEARCH_URL, wait_until="domcontentloaded")
             if print_procces:
                 print('페이지 접속 성공')
         except Exception as e:
@@ -50,6 +67,8 @@ async def get_searchedJob( options , hide_browser = False, print_procces=True):
             await click_category(option[0], main_box, print_procces)
             await click_option_1(option[1], main_box, print_procces)
         await page.pause()
+
+
     return 1
 
 
