@@ -1,0 +1,56 @@
+from pydantic import BaseModel, Field
+from typing import List, Literal
+from enum import Enum
+from src.core.utils import enums
+from src.core.utils.utils import TODO_CATEGORIES
+
+# 할일 정리
+class TaskCategory(str, Enum):
+    GUJIC = f"{TODO_CATEGORIES[0]}"
+    JASOSU = f"{TODO_CATEGORIES[1]}"
+    GJ_TALK = f"{TODO_CATEGORIES[2]}"
+    GENERAL_TALK = f"{TODO_CATEGORIES[3]}"
+
+class RequestItem(BaseModel):
+    task: TaskCategory = Field(description="발언에서 추출한 AI가 해야할일. 반드시 카테고리 중 하나")
+    message: str = Field(description="(AI가 해야할일)을 판단한 사용자의 발언 일부")
+
+class GetRequests(BaseModel):
+    requests: List[RequestItem] = Field(description="사용자의 요청사항을 분석하여 추출한 작업 목록")
+
+# 정보 추출 
+class GetInfo(BaseModel):
+    # 사용자 정보
+    education: List[enums.E_education] = Field(default_factory=list, description="사용자의 학력") 
+    major : List[str] = Field(default_factory=list, description="사용자의 전공들 특별한게 없으면 반드시 빈 리스트를 반환하세요")        # 열거형 없음
+    career : List[enums.E_career] = Field(default_factory=list, description="사용자의 경력") 
+    licenses : List[enums.E_License] = Field(default_factory=list, description="사용자의 자격증들")
+    prefer_condition : List[enums.E_ref_Cond] = Field(default_factory=list, description="우대받을 수 있는 사용자의 조건들 중 사용자에게 해당하는 조건")
+    main_experience : List[str] = Field(default_factory=list, description="자소서 작성을 위한 사용자의 경험들과 성장과정") # 열거형 없음
+
+# 희망 사항 추출 
+class GetPrefer(BaseModel):
+    pre_salary : List[int] = Field(default_factory=list, description="사용자가 희망하는 최저 연봉(단위:만원) ")  # 열거형 없음
+    pre_location : List[enums.E_location] = Field(default_factory=list, description="사용자의 희망 근무지역(시/도) ") 
+    pre_industry : List[enums.E_industry] = Field(default_factory=list, description="사용자의 근무희망 산업") 
+    pre_role : List[enums.E_role] = Field(default_factory=list, description="직무") 
+    pre_company_type : List[enums.E_company_type] = Field(default_factory=list, description="사용자의 근무희망 기업타입")
+    pre_employee_type : List[enums.E_employee_type] = Field(default_factory=list, description="사용자의 희망 근로 형태")
+    pre_benefits : List[enums.E_benfits] = Field(default_factory=list, description="사용자의 희망 복리후생")
+    pre_request : List[str] = Field(default_factory=list, description="희망 기업에 대한 추가적인 조건. 특별한게 없으면 반드시 빈 리스트를 반환하세요")   # 열거형 없음
+
+class GetDetail(BaseModel):
+    pre_role_detail : List[enums.E_role_detail] = Field(default_factory=list, description="상세직무, 명시된 상세직무가 없다면 빈 리스트를 반환하세요.")
+
+class PickJobs(BaseModel):
+    indexes : List[int] = Field(default_factory=list, description="사용자에게 가장 적합한 구직공고 10개의 번호들의 리스트, 고른 숫자는 반드시 10개 이하일것.")
+    reason : str = Field(..., max_length=500, description="당신이 해당 공고들을 고른 이유에 대해서 간략하게 설명해주세요.")
+
+class EnoughEx(BaseModel):
+    is_enugh: str = Field(description="문서가 자소서 작성에 유용한지 여부, 'yes' 또는 'no'로 답변", enum=["yes", "no"])
+
+class Evaluation(BaseModel):
+    is_useful: str = Field(description="문서가 자소서 작성에 유용한지 여부, 'yes' 또는 'no'로 답변", enum=["yes", "no"])
+    reason: str = Field(description="유용하거나 유용하지 않은 이유를 한 문장으로 요약")
+
+    
