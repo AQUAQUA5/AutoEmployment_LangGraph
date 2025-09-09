@@ -5,10 +5,10 @@ from langchain_community.vectorstores import Chroma
 import chromadb
 from enum import Enum
 from langchain_core.messages import HumanMessage
-from src.core.utils.utils import TODO_CATEGORIES, USER_INFO, USER_INFO_MAP, ROLE_TO_DETAIL_MAP, DETAIL_TO_ROLE_MAP
-from src.core.utils.config import CHROMA_DB_PATH
 import asyncio
 
+from src.core.utils.utils import TODO_CATEGORIES, USER_INFO, USER_INFO_MAP, ROLE_TO_DETAIL_MAP, DETAIL_TO_ROLE_MAP
+from src.core.utils.config import CHROMA_DB_PATH
 from src.core.state import AgentState
 from src.core.utils import prompts, parsers, utils
 from src.scraper import jobkorea, jasosu_scraper
@@ -25,8 +25,8 @@ def process_state_data(data):
     return data
 
 # llm_base = ChatOpenAI(model="gpt-5", temperature=0)
-llm_think = ChatOpenAI(model="gpt-5", temperature=0)
-llm_mini = ChatOpenAI(model="gpt-5", temperature=0)
+llm_think = ChatOpenAI(model="gpt-5-nano", temperature=0)
+llm_mini = ChatOpenAI(model="gpt-5-nano", temperature=0)
 llm_nano = ChatOpenAI(model="gpt-5-nano", temperature=0)
 
 # 요구사항 추출
